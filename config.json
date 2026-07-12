@@ -1,0 +1,22 @@
+{
+  "project": "YT Clipper",
+  "version": "0.1.0",
+  "voiceConfig": {
+    "enabled": false,
+    "provider": "elevenlabs",
+    "voiceId": "21m00Tcm4TlvDq8ikWAM",
+    "voiceName": "Rachel",
+    "language": "en"
+  },
+  "clipConfig": {
+    "minDuration": 10,
+    "maxDuration": 25,
+    "idealDuration": 15
+  },
+  "remotion": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "durationInFrames": 900
+  }
+}
