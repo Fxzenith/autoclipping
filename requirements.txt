@@ -1,2 +1,5 @@
+# DEPRECATED: replaced by pyproject.toml + uv.lock (uv-managed).
+# Kept for reference / non-uv environments only.
+# Canonical install:  uv sync   |   Run transcript:  uv run python python/transcript.py --url "<URL>"
 youtube-transcript-api>=0.4.4
 yt-dlp>=2025.1.15

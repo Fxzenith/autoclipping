@@ -1,22 +1,23 @@
 {
-  "project": "YT Clipper",
-  "version": "0.1.0",
-  "voiceConfig": {
-    "enabled": false,
-    "provider": "elevenlabs",
-    "voiceId": "21m00Tcm4TlvDq8ikWAM",
-    "voiceName": "Rachel",
-    "language": "en"
-  },
   "clipConfig": {
-    "minDuration": 10,
+    "idealDuration": 15,
     "maxDuration": 25,
-    "idealDuration": 15
+    "minDuration": 10
   },
-  "remotion": {
-    "width": 1080,
-    "height": 1920,
-    "fps": 30,
-    "durationInFrames": 900
-  }
+  "project": "YT Clipper",
+  "reframeConfig": {
+    "faceTargetRatio": 0.3,
+    "minDetectionConfidence": 0.4,
+    "outputHeight": 1280,
+    "outputWidth": 720,
+    "sampleHz": 2.0
+  },
+  "subtitleConfig": {
+    "backingBoxOpacity": 0.69,
+    "fadeMs": 200,
+    "fontSizeRatio": 0.038,
+    "trailingSilenceRatio": 0.12,
+    "wordsPerCue": 2
+  },
+  "version": "3.0.0"
 }

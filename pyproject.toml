@@ -1,0 +1,17 @@
+[project]
+name = "autoclipping"
+version = "0.1.0"
+description = "YT Clipper - convert YouTube videos into vertical Shorts (Python deps)"
+requires-python = ">=3.10"
+# Python dependencies for the pipeline. The transcript step (python/transcript.py)
+# requires youtube-transcript-api; yt-dlp is kept for parity with the original
+# requirements.txt and is used by the JS extraction layer.
+dependencies = [
+    "youtube-transcript-api>=0.4.4",
+    "yt-dlp>=2025.1.15",
+]
+
+# This repo is a script collection, not an installable package — tell uv not to
+# build/install a "autoclipping" distribution, just manage the deps above.
+[tool.uv]
+package = false

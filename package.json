@@ -10,7 +10,7 @@
     "facebook": "node \"marketing pipeline/post_to_facebook.js\"",
     "facebook:test": "node \"marketing pipeline/test_facebook.js\"",
     "start": "node main.js",
-    "setup": "npm install && pip install -r requirements.txt"
+    "setup": "npm install && uv sync"
   },
   "engines": {
     "node": ">=14"

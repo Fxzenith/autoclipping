@@ -5,6 +5,7 @@
 
 # Dependencies
 node_modules/
+.venv/
 __pycache__/
 *.pyc
 .Python
@@ -16,9 +17,13 @@ ENV/
 data/transcript.json
 data/clips.json
 data/clips_review.md
+data/*.ass
 video/
 assets/
 Outputs/
+
+# Models (download via scripts/setup.sh, not committed)
+models/
 
 # IDE
 .vscode/

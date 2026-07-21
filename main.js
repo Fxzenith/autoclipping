@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * YT Clipper main orchestrator.
+ * YT Clipper — main orchestrator (v3 pipeline).
  *
  * Pipeline:
- * 1. Fetch transcript
- * 2. Ask Claude to create clips.json and review.md
- * 3. Wait for approval
- * 4. Download and cut clips
- * 5. Render final shorts
- * 6. Burn timed subtitles into the rendered clips
+ * 1. Fetch transcript (python/transcript.py)
+ * 2. Claude clip selection (manual/AI step)
+ * 3. Approval gate
+ * 4. Download & cut clips (scripts/extract.js)
+ * 5. Face-tracked vertical reframe (scripts/render.js → face_reframe.py)
+ * 6. Burn timed subtitles (scripts/subtitles_oneline.py --face-track)
+ *
+ * Usage:
+ *   node main.js <youtube_url> [--approve] [--skip-render] [--skip-subtitles]
  */
 
 const fs = require('fs');
@@ -21,7 +24,6 @@ const DATA_DIR = path.join(ROOT_DIR, 'data');
 const TRANSCRIPT_PATH = path.join(DATA_DIR, 'transcript.json');
 const CLIPS_PATH = path.join(DATA_DIR, 'clips.json');
 const REVIEW_PATH = path.join(DATA_DIR, 'clips_review.md');
-const FACEBOOK_POST_SCRIPT = path.join(ROOT_DIR, 'marketing pipeline', 'post_to_facebook.js');
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -45,9 +47,9 @@ function runCommand(command, args, label) {
 }
 
 function fetchTranscript(videoUrl) {
-  console.log('\n[1/5] Fetching transcript...');
+  console.log('\n[1/6] Fetching transcript...');
   ensureDataDir();
-  runCommand('python', ['python/transcript.py', '--url', videoUrl, '--out', TRANSCRIPT_PATH], 'Transcript fetch');
+  runCommand('uv', ['run', 'python', 'python/transcript.py', '--url', videoUrl, '--out', TRANSCRIPT_PATH], 'Transcript fetch');
 
   if (!fs.existsSync(TRANSCRIPT_PATH)) {
     throw new Error(`Transcript file not found at ${TRANSCRIPT_PATH}`);
@@ -62,10 +64,10 @@ function fetchTranscript(videoUrl) {
 }
 
 function waitForClipSelection() {
-  console.log('\n[2/5] Claude clip selection');
-  console.log(' Create the following files before continuing:');
-  console.log(' - data/clips.json');
-  console.log(' - data/clips_review.md');
+  console.log('\n[2/6] Claude clip selection');
+  console.log('  Create the following files before continuing:');
+  console.log('  - data/clips.json');
+  console.log('  - data/clips_review.md');
   console.log('');
   console.log('  Suggested clip criteria:');
   console.log('  - 5 to 10 clips');
@@ -75,7 +77,7 @@ function waitForClipSelection() {
 }
 
 async function waitForApproval(autoApprove = false) {
-  console.log('\n[3/5] Approval gate');
+  console.log('\n[3/6] Approval gate');
 
   const reviewExists = fs.existsSync(REVIEW_PATH);
   if (!reviewExists) {
@@ -89,7 +91,7 @@ async function waitForApproval(autoApprove = false) {
   const clipsData = JSON.parse(fs.readFileSync(CLIPS_PATH, 'utf8'));
   const clips = Array.isArray(clipsData.clips) ? clipsData.clips : [];
 
-  const invalidClips = clips.filter((clip, idx) => {
+  const invalidClips = clips.filter((clip) => {
     return !clip.title || !clip.hook || typeof clip.start !== 'number' || typeof clip.end !== 'number';
   });
 
@@ -97,7 +99,7 @@ async function waitForApproval(autoApprove = false) {
     throw new Error(`Invalid clips.json: ${invalidClips.length} clip(s) missing required fields (title, hook, start, end)`);
   }
 
-  console.log(' Review file found: data/clips_review.md');
+  console.log('  Review file found: data/clips_review.md');
 
   if (autoApprove) {
     console.log('  Auto-approved via --approve');
@@ -125,30 +127,64 @@ async function waitForApproval(autoApprove = false) {
 }
 
 function extractClips(videoUrl) {
-  console.log('\n[4/5] Downloading and cutting clips...');
+  console.log('\n[4/6] Downloading and cutting clips...');
   runCommand('node', ['scripts/extract.js', videoUrl], 'Clip extraction');
 }
 
 function renderVideos() {
-  console.log('\n[5/5] Rendering final videos...');
-  runCommand('node', ['scripts/render.js'], 'Rendering');
+  console.log('\n[5/6] Face-tracked vertical reframe...');
+  runCommand('node', ['scripts/render.js'], 'Face-tracked reframe');
 }
 
 function burnSubtitles() {
-  console.log('\n[6/6] Burning timed subtitles...');
-  runCommand('node', ['scripts/add_subtitles.js'], 'Subtitle burn-in');
-}
+  console.log('\n[6/6] Burning timed subtitles (face-tracked, one-line, faded)...');
 
-function postToFacebook() {
-  console.log('\n[7/7] Posting to Facebook...');
-  runCommand('node', [FACEBOOK_POST_SCRIPT], 'Facebook posting');
+  const clips = JSON.parse(fs.readFileSync(CLIPS_PATH, 'utf8')).clips;
+  const outputsDir = path.join(ROOT_DIR, 'Outputs');
+  let burned = 0;
+
+  clips.forEach((clip, i) => {
+    const num = String(i + 1).padStart(2, '0');
+    const slug = String(clip.title || `clip_${num}`)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 60);
+
+    const inputFile = path.join(outputsDir, `${num}_${slug}.mp4`);
+    const outputFile = path.join(outputsDir, `${num}_${slug}_subtitled.mp4`);
+
+    if (!fs.existsSync(inputFile)) {
+      console.warn(`  Skipping clip ${num}: missing ${inputFile}`);
+      return;
+    }
+
+    console.log(`  Burning subtitles for clip ${num}: ${clip.title}`);
+    runCommand('python3', [
+      'scripts/subtitles_oneline.py',
+      '--burn', inputFile,
+      '--burn-out', outputFile,
+      '--face-track',
+    ], `Subtitle burn clip ${num}`);
+
+    // Replace original with subtitled version
+    try {
+      fs.renameSync(outputFile, inputFile);
+      burned++;
+      console.log(`  ✓ Clip ${num} subtitled`);
+    } catch (err) {
+      console.warn(`  Could not rename ${outputFile}: ${err.message}`);
+    }
+  });
+
+  console.log(`\n  Subtitles burned on ${burned}/${clips.length} clips`);
 }
 
 async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || args[0].startsWith('-')) {
-    console.log('Usage: node main.js <youtube_url> [--approve] [--skip-render] [--skip-subtitles] [--facebook]');
+    console.log('Usage: node main.js <youtube_url> [--approve] [--skip-render] [--skip-subtitles]');
     console.log('Example: node main.js "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --approve');
     process.exit(1);
   }
@@ -157,10 +193,9 @@ async function main() {
   const autoApprove = args.includes('--approve');
   const skipRender = args.includes('--skip-render');
   const skipSubtitles = args.includes('--skip-subtitles');
-  const postToFacebookEnabled = args.includes('--facebook');
 
   console.log('============================================================');
-  console.log('YT Clipper - YouTube Shorts Generator');
+  console.log('YT Clipper v3 — Face-Tracked Shorts Pipeline');
   console.log('============================================================');
 
   const transcript = fetchTranscript(videoUrl);
@@ -196,18 +231,9 @@ async function main() {
     console.log('\nSubtitle burn-in skipped via --skip-subtitles');
   }
 
-  if (postToFacebookEnabled) {
-    if (skipRender) {
-      throw new Error('Cannot post to Facebook when render is skipped. Remove --skip-render or omit --facebook.');
-    }
-    postToFacebook();
-  }
-
   console.log('\n============================================================');
   console.log('Pipeline complete');
-  console.log('  Clips:    assets/');
-  console.log('  Output:   Outputs/');
-  console.log('  Video:    video/full.mp4');
+  console.log('  Outputs:  Outputs/');
   console.log('============================================================');
 }
 
